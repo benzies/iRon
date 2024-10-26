@@ -48,9 +48,9 @@ The fuel calculator shows the estimated remaining laps, remaining amount of fuel
 
 ### *Inputs*
 
-Shows throttle/brake/steering in a moving graph. I find it useful to practice consistent braking.
+Shows throttle/brake/clutch/handbrake/steering in a moving graph. I find it useful to practice consistent braking.
 
-![inputs](https://github.com/lespalt/iRon/blob/main/inputs.png?raw=true)
+![inputs](https://raw.githubusercontent.com/benzies/iRon/refs/heads/main/iron_inputs.png)
 
 ### *Standings*
 
