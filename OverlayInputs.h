@@ -49,15 +49,19 @@ class OverlayInputs : public Overlay
             m_throttleVtx.resize( m_width );
             m_brakeVtx.resize( m_width );
             m_steerVtx.resize( m_width );
+            m_clutchVtx.resize(m_width);
+            m_handbrakeVtx.resize(m_width);
             for( int i=0; i<m_width; ++i )
             {
                 m_throttleVtx[i].x = float(i);
                 m_brakeVtx[i].x = float(i);
                 m_steerVtx[i].x = float(i);
+                m_clutchVtx[i].x = float(i);
+                m_handbrakeVtx[i].x = float(i);
             }
         }
 
-        virtual void onUpdate()
+        virtual void updateInputGraphs()
         {
             const float w = (float)m_width;
             const float h = (float)m_height;
@@ -69,6 +73,10 @@ class OverlayInputs : public Overlay
                 m_brakeVtx.resize( 1 );
             if( m_steerVtx.empty() )
                 m_steerVtx.resize( 1 );
+			if (m_clutchVtx.empty())
+				m_clutchVtx.resize(1);
+            if (m_handbrakeVtx.empty())
+                m_handbrakeVtx.resize(1);
 
             // Advance input vertices
             {
@@ -83,6 +91,13 @@ class OverlayInputs : public Overlay
                 for( int i=0; i<(int)m_steerVtx.size()-1; ++i )
                     m_steerVtx[i].y = m_steerVtx[i+1].y;
                 m_steerVtx[(int)m_steerVtx.size()-1].y = std::min( 1.0f, std::max( 0.0f, (ir_SteeringWheelAngle.getFloat() / ir_SteeringWheelAngleMax.getFloat()) * -0.5f + 0.5f) );
+
+                for (int i = 0; i < (int)m_clutchVtx.size() - 1; ++i) 
+                    m_clutchVtx[i].y = m_clutchVtx[i + 1].y;
+                m_clutchVtx[(int)m_clutchVtx.size() - 1].y = 1.0f - ir_Clutch.getFloat();
+                for (int i = 0; i < (int)m_handbrakeVtx.size() - 1; ++i)
+                    m_handbrakeVtx[i].y = m_handbrakeVtx[i + 1].y;
+                m_handbrakeVtx[(int)m_handbrakeVtx.size() - 1].y = ir_HandbrakeRaw.getFloat();
             }
 
             const float thickness = g_cfg.getFloat( m_name, "line_thickness", 2.0f );
@@ -147,18 +162,80 @@ class OverlayInputs : public Overlay
             steeringLineSink->EndFigure( D2D1_FIGURE_END_OPEN );
             steeringLineSink->Close();
 
+            // Clutch (fill)
+            Microsoft::WRL::ComPtr<ID2D1PathGeometry1> clutchFillPath;
+            Microsoft::WRL::ComPtr<ID2D1GeometrySink> clutchFillSink;
+            m_d2dFactory->CreatePathGeometry(&clutchFillPath);
+            clutchFillPath->Open(&clutchFillSink);
+            clutchFillSink->BeginFigure(float2(0, h), D2D1_FIGURE_BEGIN_FILLED);
+            for (int i = 0; i < (int)m_clutchVtx.size(); ++i)
+                clutchFillSink->AddLine(vtx2coord(m_clutchVtx[i]));
+            clutchFillSink->AddLine(float2(m_clutchVtx[m_clutchVtx.size() - 1].x + 0.5f, h));
+            clutchFillSink->EndFigure(D2D1_FIGURE_END_OPEN);
+            clutchFillSink->Close();
+
+            // Clutch (line)
+            Microsoft::WRL::ComPtr<ID2D1PathGeometry1> clutchLinePath;
+            Microsoft::WRL::ComPtr<ID2D1GeometrySink> clutchLineSink;
+            m_d2dFactory->CreatePathGeometry(&clutchLinePath);
+            clutchLinePath->Open(&clutchLineSink);
+            clutchLineSink->BeginFigure(vtx2coord(m_clutchVtx[0]), D2D1_FIGURE_BEGIN_HOLLOW);
+            for (int i = 1; i < (int)m_clutchVtx.size(); ++i)
+                clutchLineSink->AddLine(vtx2coord(m_clutchVtx[i]));
+            clutchLineSink->EndFigure(D2D1_FIGURE_END_OPEN);
+            clutchLineSink->Close();
+
+            // Handbrake (line)
+            Microsoft::WRL::ComPtr<ID2D1PathGeometry1> handbrakeLinePath;
+            Microsoft::WRL::ComPtr<ID2D1GeometrySink> handbrakeLineSink;
+            m_d2dFactory->CreatePathGeometry(&handbrakeLinePath);
+            handbrakeLinePath->Open(&handbrakeLineSink);
+            handbrakeLineSink->BeginFigure(vtx2coord(m_handbrakeVtx[0]), D2D1_FIGURE_BEGIN_HOLLOW);
+            for (int i = 1; i < (int)m_handbrakeVtx.size(); ++i)
+                handbrakeLineSink->AddLine(vtx2coord(m_handbrakeVtx[i]));
+            handbrakeLineSink->EndFigure(D2D1_FIGURE_END_OPEN);
+            handbrakeLineSink->Close();
+
+            // Handbrake (fill)
+            Microsoft::WRL::ComPtr<ID2D1PathGeometry1> handbrakeFillPath;
+            Microsoft::WRL::ComPtr<ID2D1GeometrySink> handbrakeFillSink;
+            m_d2dFactory->CreatePathGeometry(&handbrakeFillPath);
+            handbrakeFillPath->Open(&handbrakeFillSink);
+            handbrakeFillSink->BeginFigure(float2(0, h), D2D1_FIGURE_BEGIN_FILLED);
+            for (int i = 0; i < (int)m_handbrakeVtx.size(); ++i)
+                handbrakeFillSink->AddLine(vtx2coord(m_handbrakeVtx[i]));
+            handbrakeFillSink->AddLine(float2(m_handbrakeVtx[m_handbrakeVtx.size() - 1].x + 0.5f, h));
+            handbrakeFillSink->EndFigure(D2D1_FIGURE_END_OPEN);
+            handbrakeFillSink->Close();
+
+
             m_renderTarget->BeginDraw();
-            m_brush->SetColor( g_cfg.getFloat4( m_name, "throttle_fill_col", float4(0.2f,0.45f,0.15f,0.6f) ) );
-            m_renderTarget->FillGeometry( throttleFillPath.Get(), m_brush.Get() );
-            m_brush->SetColor( g_cfg.getFloat4( m_name, "brake_fill_col", float4(0.46f,0.01f,0.06f,0.6f) ) );
-            m_renderTarget->FillGeometry( brakeFillPath.Get(), m_brush.Get() );
-            m_brush->SetColor( g_cfg.getFloat4( m_name, "throttle_col", float4(0.38f,0.91f,0.31f,0.8f) ) );
-            m_renderTarget->DrawGeometry( throttleLinePath.Get(), m_brush.Get(), thickness );
-            m_brush->SetColor( g_cfg.getFloat4( m_name, "brake_col", float4(0.93f,0.03f,0.13f,0.8f) ) );
-            m_renderTarget->DrawGeometry( brakeLinePath.Get(), m_brush.Get(), thickness );
-            m_brush->SetColor( g_cfg.getFloat4( m_name, "steering_col", float4(1,1,1,0.3f) ) );
-            m_renderTarget->DrawGeometry( steeringLinePath.Get(), m_brush.Get(), thickness );
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "clutch_fill_col", float4(0.0f, 0.0f, 1.0f, 0.6f)));
+            m_renderTarget->FillGeometry(clutchFillPath.Get(), m_brush.Get());
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "clutch_col", float4(0.0f, 0.0f, 1.0f, 0.8f))); 
+            m_renderTarget->DrawGeometry(clutchLinePath.Get(), m_brush.Get(), thickness);
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "throttle_fill_col", float4(0.2f, 0.45f, 0.15f, 0.6f)));
+            m_renderTarget->FillGeometry(throttleFillPath.Get(), m_brush.Get());
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "brake_fill_col", float4(0.46f, 0.01f, 0.06f, 0.6f)));
+            m_renderTarget->FillGeometry(brakeFillPath.Get(), m_brush.Get());
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "throttle_col", float4(0.38f, 0.91f, 0.31f, 0.8f)));
+            m_renderTarget->DrawGeometry(throttleLinePath.Get(), m_brush.Get(), thickness);
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "brake_col", float4(0.93f, 0.03f, 0.13f, 0.8f)));
+            m_renderTarget->DrawGeometry(brakeLinePath.Get(), m_brush.Get(), thickness);
+            m_brush->SetColor(g_cfg.getFloat4(m_name, "steering_col", float4(1, 1, 1, 0.3f)));
+            m_renderTarget->DrawGeometry(steeringLinePath.Get(), m_brush.Get(), thickness);
+            m_brush->SetColor(D2D1::ColorF(D2D1::ColorF::Orange));
+            m_renderTarget->DrawGeometry(handbrakeFillPath.Get(), m_brush.Get());
+            m_brush->SetColor(D2D1::ColorF(D2D1::ColorF::Orange));
+            m_renderTarget->DrawGeometry(handbrakeLinePath.Get(), m_brush.Get(), thickness);
             m_renderTarget->EndDraw();
+
+        }
+
+        virtual void onUpdate() 
+        {
+            
+            updateInputGraphs();
         }
 
     protected:
@@ -166,4 +243,7 @@ class OverlayInputs : public Overlay
         std::vector<float2> m_throttleVtx;
         std::vector<float2> m_brakeVtx;
         std::vector<float2> m_steerVtx;
+        std::vector<float2> m_clutchVtx;
+        std::vector<float2> m_handbrakeVtx;
+
 };
